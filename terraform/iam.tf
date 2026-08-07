@@ -39,8 +39,8 @@ resource "aws_iam_role" "ecs_task" {
 
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [var.github_thumbprint]
+  client_id_list  = ["https://github.com/heyharshitrai", "sts.amazonaws.com"]
+  thumbprint_list = var.github_thumbprints
 }
 
 resource "aws_iam_role" "github_actions" {
@@ -50,17 +50,17 @@ resource "aws_iam_role" "github_actions" {
     Version = "2012-10-17"
     Statement = [
       {
-        Action = "sts:AssumeRole"
+        Action = "sts:AssumeRoleWithWebIdentity"
         Effect = "Allow"
         Principal = {
           Federated = aws_iam_openid_connect_provider.github.arn
         }
         Condition = {
           StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+            "token.actions.githubusercontent.com:aud" = ["sts.amazonaws.com", "https://github.com/heyharshitrai"]
           }
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:sub" = "repo:heyharshitrai*:ref:refs/heads/main"
           }
         }
       }
