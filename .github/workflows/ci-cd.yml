@@ -1,0 +1,49 @@
+name: ci-cd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest -q
+      - run: flake8 app.py tests
+
+  build-and-deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecs-fargate-pipeline-github-actions
+          aws-region: ap-south-1
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: build and push
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE: ecs-fargate-pipeline
+        run: |
+          docker build -t $REGISTRY/$IMAGE:${{ github.sha }} .
+          docker tag $REGISTRY/$IMAGE:${{ github.sha }} $REGISTRY/$IMAGE:latest
+          docker push $REGISTRY/$IMAGE:${{ github.sha }}
+          docker push $REGISTRY/$IMAGE:latest
+      - name: deploy
+        run: |
+          aws ecs update-service --cluster ecs-fargate-pipeline --service ecs-fargate-pipeline --force-new-deployment
